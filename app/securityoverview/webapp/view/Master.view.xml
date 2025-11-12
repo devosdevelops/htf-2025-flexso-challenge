@@ -23,11 +23,14 @@
             <ObjectPageDynamicHeaderTitle>
                 <content>
                     <m:HBox>
-                        <m:Input
+                        <m:ComboBox id="locationInput" 
                             class="sapUiTinyMargin"
-                            placeholder="Enter the area you want to observe"
-                            change="onSelectLocation"
-                        />
+                            placeholder="Select the area you want to observe"
+                            selectionChange="onSelectLocation"
+                            forceSelection="false"
+                            items="{/SubnauticLocation}">
+                            <core:Item key="{ID}" text="{name}" />
+                        </m:ComboBox>
                         <m:VBox binding="{path:'/checkCameraAvailability()'}">
                             <core:Icon src="sap-icon://video"
                                 visible="{value}"
@@ -58,6 +61,13 @@
             <ObjectPageSection showTitle="false" visible="{appView>/hasSelectedLocation}">
                 <subSections>
                     <ObjectPageSubSection class="sapUxAPObjectPageSubSectionFitContainer">
+
+                        <m:Panel headerText="Selected camera recording" class="sapUiSmallMargin">
+                            <m:VBox>
+                                <m:Text text="{recording}" />
+                                <m:Text text="ID: {ID}" class="sapUiSmallMarginTop"/> 
+                            </m:VBox>
+                        </m:Panel>
 
                     </ObjectPageSubSection>
                 </subSections>

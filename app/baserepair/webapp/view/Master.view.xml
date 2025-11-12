@@ -48,7 +48,7 @@
                                 <ColumnListItem>
                                     <cells>
                                         <Text text="{name}" />
-                                        <Text text="{amountInStock}" />
+                                        <ObjectStatus text="{path: 'amountInStock', formatter: '.formatter.stockText'}" state="{path: 'amountInStock', formatter: '.formatter.stockState'}" />
                                         <Text text="{amountOrderd}" />
                                         <Text text="{amountNeededForProduction}" />
                                     </cells>
@@ -74,7 +74,7 @@
                         </m:ProcessFlow>
                     </IconTabFilter>
                     <IconTabFilter id="_IDGenIconTabFilter2" key="Installations" text="Installations">
-                        <Table id="idInstallationsTable" inset="false" mode="SingleSelectLeft" items="{path: 'installations'}">
+                        <Table id="idInstallationsTable" inset="false" mode="None" items="{path: 'installations'}">
                             <headerToolbar>
                                 <Toolbar>
                                     <Title text="Installations" level="H2" />

@@ -26,6 +26,18 @@ export default class SonarOverview extends Controller {
         return entry?.value;
     }
 
+    private _colorFromString(s: string): string {
+        let hash = 0;
+        for (let i = 0; i < s.length; i++) {
+            hash = s.charCodeAt(i) + ((hash << 5) - hash);
+            hash = hash & hash;
+        }
+        const hue = Math.abs(hash) % 360;
+        const saturation = 65;
+        const lightness = 50;
+        return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
+
     private async _initVizFrame(): Promise<void> { 
         //This whole vizframe setup isn't very well documented or known online
         //Don't be afraid to ask some of the Crew to help with this part if you get stuck
@@ -36,7 +48,7 @@ export default class SonarOverview extends Controller {
             const i18nModel = this.getOwnerComponent()?.getModel("i18n") as ResourceModel | undefined;
             const resourceBundle = await i18nModel?.getResourceBundle();
 
-            oViz.setVizProperties({
+            const baseProps: any = {
                 title: { text: resourceBundle?.getText("title") },
                 plotArea: {
                     dataLabel: { visible: true },
@@ -46,7 +58,11 @@ export default class SonarOverview extends Controller {
                 valueAxis: { title: { text: resourceBundle?.getText("HoursInPast") } },
                 valueAxis2: { title: { text: resourceBundle?.getText("MilesFromBase") } },
                 interaction: { selectability: { mode: "single" } }
-            });
+            };
+
+            const strengthGradient = ['#2ca02c', '#98df8a', '#ffcc00', '#ff7f0e', '#d62728'];
+            baseProps.plotArea.colorPalette = strengthGradient;
+            oViz.setVizProperties(baseProps);
             oViz.attachSelectData(this.onSelectData, this);
             oViz.attachEventOnce("renderComplete", () => {
                 oViz.setVizProperties({ legend: { title: { text: resourceBundle?.getText("SonarType") } } });
@@ -104,6 +120,40 @@ export default class SonarOverview extends Controller {
             })
             vizPopover.connect(oViz.getVizUid());
             vizPopover.setFormatString(ChartFormatter.DefaultPattern.STANDARDFLOAT);
+        }
+        
+        try {
+            const resp = await fetch('/odata/v4/admin/Sonar?$expand=sonarType,subnauticLocation&$select=ID,finding,hoursInPast,milesFromBase,signalStrength,sonarType_ID');
+            if (resp.ok) {
+                const json = await resp.json();
+                const rows = (json && json.value) || [];
+                const enriched = rows.map((r: any) => {
+                    const hours = Number(r.hoursInPast || 0);
+                    let bucket = 'recent';
+                    if (hours > 24) bucket = 'old';
+                    else if (hours > 6) bucket = 'stale';
+                    return Object.assign({}, r, { AgeBucket: bucket, Hours: hours, Miles: r.milesFromBase, Size: r.signalStrength });
+                });
+                const JSONModel = (await import('sap/ui/model/json/JSONModel')).default;
+                const m = new JSONModel({ Sonar: enriched });
+                this.getView()?.setModel(m, 'sonarLocal');
+                const counts = enriched.reduce((acc: any, r: any) => { acc[r.AgeBucket] = (acc[r.AgeBucket] || 0) + 1; return acc; }, {});
+                console.debug('[sonaroverview] AgeBucket counts', counts);
+                try {
+                    const viz = this.byId('sonarBubble') as any;
+                    const ds = this.byId('sonarDataset') as any;
+                    if (ds && typeof ds.setData === 'function') {
+                        ds.setData(enriched);
+                    }
+                    if (viz && typeof viz.invalidate === 'function') viz.invalidate();
+                } catch (e) {
+                    /* best-effort refresh */
+                }
+            } else {
+                console.warn('[sonaroverview] sonar fetch failed', resp.status);
+            }
+        } catch (e) {
+            console.warn('[sonaroverview] failed to load sonar data for buckets', e);
         }
 
     }

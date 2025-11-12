@@ -1,1 +1,22 @@
-/* Enter your custom styles here */
+/* Sonar legend color blocks and spacing */
+.sonarLegendBlock-0 .sapMBtnContent, .sonarLegendBlock-1 .sapMBtnContent, .sonarLegendBlock-2 .sapMBtnContent, .sonarLegendBlock-3 .sapMBtnContent, .sonarLegendBlock-4 .sapMBtnContent {
+	width: 24px;
+	height: 16px;
+	padding: 0;
+	border-radius: 2px;
+}
+.sonarLegendBlock-0 .sapMBtnInner { background-color: #2ca02c !important; }
+.sonarLegendBlock-1 .sapMBtnInner { background-color: #98df8a !important; }
+.sonarLegendBlock-2 .sapMBtnInner { background-color: #ffcc00 !important; }
+.sonarLegendBlock-3 .sapMBtnInner { background-color: #ff7f0e !important; }
+.sonarLegendBlock-4 .sapMBtnInner { background-color: #d62728 !important; }
+
+.sonarLegendBlock-0, .sonarLegendBlock-1, .sonarLegendBlock-2, .sonarLegendBlock-3, .sonarLegendBlock-4 {
+	margin: 0 6px;
+}
+
+.sonarLegendBox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}

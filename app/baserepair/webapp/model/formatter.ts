@@ -10,4 +10,26 @@ export default {
 
     return temp;
   },
+
+  /**
+   * Returns a semantic state for an ObjectStatus / ObjectAttribute based on stock level.
+   * - amount >= 10 -> Success (green)
+   * - amount > 0 and < 10 -> Warning (yellow)
+   * - amount === 0 -> Error (red)
+   */
+  stockState: (amount: number) => {
+    if (typeof amount !== 'number') return 'None';
+    if (amount >= 10) return 'Success';
+    if (amount > 0) return 'Warning';
+    return 'Error';
+  },
+
+  /**
+   * Small helper to render a human readable stock text.
+   */
+  stockText: (amount: number) => {
+    if (typeof amount !== 'number') return '';
+    if (amount <= 0) return 'Out of stock';
+    return `${amount} in stock`;
+  }
 };

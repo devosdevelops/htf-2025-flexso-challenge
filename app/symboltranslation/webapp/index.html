@@ -35,5 +35,44 @@
       data-settings='{"id" : "flexso.cap.htf.symboltranslation"}'
       data-handle-validation="true"
     ></div>
+    <script>
+      // Global error overlay to surface runtime errors (helps when you see a white page)
+      (function () {
+        function showError(message, stack) {
+          try {
+            var el = document.getElementById('__error_overlay__');
+            if (!el) {
+              el = document.createElement('div');
+              el.id = '__error_overlay__';
+              el.style.position = 'fixed';
+              el.style.left = '8px';
+              el.style.right = '8px';
+              el.style.top = '8px';
+              el.style.zIndex = '99999';
+              el.style.padding = '12px';
+              el.style.background = 'rgba(200,20,20,0.95)';
+              el.style.color = 'white';
+              el.style.fontFamily = 'monospace';
+              el.style.fontSize = '13px';
+              el.style.whiteSpace = 'pre-wrap';
+              el.style.borderRadius = '6px';
+              document.body.appendChild(el);
+            }
+            el.textContent = 'Runtime error: ' + message + '\n\n' + (stack || '');
+          } catch (e) {
+            /* ignore */
+          }
+        }
+
+        window.addEventListener('error', function (ev) {
+          showError(ev.message || String(ev), ev.error && ev.error.stack ? ev.error.stack : ev.filename + ':' + ev.lineno + ':' + ev.colno);
+        });
+
+        window.addEventListener('unhandledrejection', function (ev) {
+          var r = ev && ev.reason;
+          showError('Unhandled Promise rejection: ' + (r && r.message ? r.message : String(r)), r && r.stack ? r.stack : '');
+        });
+      })();
+    </script>
   </body>
 </html>

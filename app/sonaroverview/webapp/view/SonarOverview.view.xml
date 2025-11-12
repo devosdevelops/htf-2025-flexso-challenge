@@ -9,16 +9,16 @@
         <!-- Experiment with the viz properties, don't worry if it breaks-->
         <viz:VizFrame id="sonarBubble" uiConfig="{applicationSet:'fiori'}" height="600px" width="100%" vizType="bubble">
             <viz:dataset>
-                <vizDataset:FlattenedDataset id="sonarDataset" data="{ path: '/Sonar', parameters: { $expand: 'sonarType,subnauticLocation' } }">
+                <vizDataset:FlattenedDataset id="sonarDataset" data="{ path: '/Sonar', model: 'sonarLocal' }">
                     <vizDataset:dimensions>
                         <vizDataset:DimensionDefinition id="sonarFinding" name="SonarFinding" value="{finding}" />
                         <!-- Expose sonar type name and id so selection payload contains them -->
                         <vizDataset:DimensionDefinition id="sonarTypeId" name="SonarTypeID" value="{sonarType_ID}" />
                     </vizDataset:dimensions>
                     <vizDataset:measures>
-                        <vizDataset:MeasureDefinition id="hoursMeas" name="Hours" value="{hoursInPast}"/>
-                        <vizDataset:MeasureDefinition id="milesMeas" name="Miles" value="{milesFromBase}"/>
-                        <vizDataset:MeasureDefinition id="sizeMeas" name="Size" value="{signalStrength}"/>
+                        <vizDataset:MeasureDefinition id="hoursMeas" name="Hours" value="{Hours}"/>
+                        <vizDataset:MeasureDefinition id="milesMeas" name="Miles" value="{Miles}"/>
+                        <vizDataset:MeasureDefinition id="sizeMeas" name="Size" value="{Size}"/>
                     </vizDataset:measures>
                 </vizDataset:FlattenedDataset>
             </viz:dataset>
@@ -26,7 +26,7 @@
                 <vizFeeds:FeedItem id="feedValueAxis" uid="valueAxis" type="Measure" values="Hours"/>
                 <vizFeeds:FeedItem id="feedValueAxis2" uid="valueAxis2" type="Measure" values="Miles"/>
                 <vizFeeds:FeedItem id="feedBubbleWidth" uid="bubbleWidth" type="Measure" values="Size"/>
-                <vizFeeds:FeedItem id="feedBubbleColor" uid="bubbleColor" type="Dimension" values="SonarTypeId"/>
+                <vizFeeds:FeedItem id="feedBubbleColor" uid="bubbleColor" type="Measure" values="Size"/>
             </viz:feeds>
             <viz:dependents>
                 <viz:Popover id="sonarPopOver" />

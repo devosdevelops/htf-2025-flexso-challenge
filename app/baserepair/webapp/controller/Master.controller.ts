@@ -8,6 +8,8 @@ import Table from "sap/m/Table";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import Fragment from "sap/ui/core/Fragment";
 import Dialog from "sap/m/Dialog";
+import MessageToast from "sap/m/MessageToast";
+import MessageBox from "sap/m/MessageBox";
 import BusyIndicator from "sap/ui/core/BusyIndicator";
 import ProcessFlow from "sap/suite/ui/commons/ProcessFlow";
 import ListItem from "sap/ui/core/ListItem";
@@ -132,8 +134,10 @@ export default class Master extends Controller {
       }
     } catch (e) {
       console.warn('[debug] order failed', e);
+      try { MessageToast.show('Order failed'); } catch {}
     } finally {
       BusyIndicator.hide();
+      try { MessageToast.show('Order placed'); } catch {}
     }
   }
 
@@ -155,8 +159,10 @@ export default class Master extends Controller {
       await this.callBoundAction('produce', bindingContext);
       try { this.refeshProducton(); } catch {}
       view.getModel()?.refresh();
+      try { MessageToast.show('Production started'); } catch {}
     } catch (e) {
       console.error('[debug] produce failed', e);
+      try { MessageToast.show('Produce failed'); } catch {}
     } finally {
       BusyIndicator.hide();
     }
@@ -168,6 +174,15 @@ export default class Master extends Controller {
   }
 
   public async replaceCamera(event: ui5Event): Promise<void> {
+    // Prevent replace when no stock available on the ProductCamera
+    try {
+      const viewCtx = this.getView() && (this.getView() as any).getBindingContext ? (this.getView() as any).getBindingContext() : null;
+      const stock = viewCtx && typeof viewCtx.getProperty === 'function' ? viewCtx.getProperty('amountInStock') : undefined;
+      if (typeof stock === 'number' && stock <= 0) {
+        try { MessageToast.show('No stock available for replacement'); } catch {}
+        return;
+      }
+    } catch (e) { /* ignore */ }
     const src = (event.getSource && event.getSource()) as any;
     let bindingContext = src && src.getBindingContext ? src.getBindingContext() : null;
     if (!bindingContext) {
@@ -180,11 +195,22 @@ export default class Master extends Controller {
     }
     if (!bindingContext) return;
     const id = bindingContext.getProperty('ID');
-    try {
-      await this.callBoundAction('replace', bindingContext, { id });
-    } catch (e) {
-      console.error('[debug] replace failed', e);
-    }
-    (this.byId('idInstallationsTable') as Table).getModel()?.refresh();
+    // Confirm replace action with the user
+    MessageBox.confirm('Replace this installation with a new camera (will consume one from stock)?', {
+      onClose: async (sAction: string) => {
+        if (sAction !== MessageBox.Action.OK) return;
+        BusyIndicator.show();
+        try {
+          await this.callBoundAction('replace', bindingContext, { id });
+          (this.byId('idInstallationsTable') as Table).getModel()?.refresh();
+          try { MessageToast.show('Replacement succeeded'); } catch {}
+        } catch (e) {
+          console.error('[debug] replace failed', e);
+          try { MessageToast.show('Replacement failed'); } catch {}
+        } finally {
+          BusyIndicator.hide();
+        }
+      }
+    });
   }
 }

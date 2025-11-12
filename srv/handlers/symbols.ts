@@ -1,104 +1,154 @@
 import * as cds from "@sap/cds";
 const { Symbol, SymbolTranslation } = cds.entities;
 
-function toIdArray(params: any): string[] {
-  if (Array.isArray(params)) return params as string[];
-  if (!params) return [];
-  return [params] as string[];
-}
-
-function chooseTextField(record: any): string | null {
-  const preferred = ["symbol", "Symbol", "translation", "Translation", "text", "Text"];
-  for (const p of preferred) if (record && Object.prototype.hasOwnProperty.call(record, p) && typeof record[p] === "string") return p;
-  for (const k of Object.keys(record || {})) if (k.toLowerCase() !== "id" && typeof record[k] === "string") return k;
-  return null;
-}
-
-function buildLookup(translationsRaw: any[]): Record<string, Record<string, string>> {
-  const out: Record<string, Record<string, string>> = {};
-  for (const t of translationsRaw || []) {
-    const lang = t.language ?? "";
-    out[lang] = out[lang] || {};
-    if (typeof t.symbol === "string" && typeof t.translation === "string") out[lang][t.symbol] = t.translation;
-  }
-  return out;
-}
-
-function translateTokens(original: string, lookup: Record<string, Record<string, string>>, lang: string): string {
-  const tokens = (original || "").split(/[\s,;\/|]+/).filter(Boolean);
-  return tokens
-    .map(tok => {
-      if (lookup[lang] && lookup[lang][tok]) return lookup[lang][tok];
-      if (lookup[""] && lookup[""][tok]) return lookup[""][tok];
-      for (const lk of Object.keys(lookup)) {
-        const match = Object.keys(lookup[lk]).find(k => k.toLowerCase() === tok.toLowerCase());
-        if (match) return lookup[lk][match];
-      }
-      return tok;
-    })
-    .join(" ");
-}
-
-async function upsertTranslation(symbolKey: string, lang: string | null, translated: string) {
-  const existing: any = await SELECT.one.from(SymbolTranslation).where({ symbol: symbolKey, language: lang });
-  if (existing) {
-    await UPDATE(SymbolTranslation).set({ translation: translated }).where({ ID: existing.ID });
-    return { action: "update", id: existing.ID };
-  }
-  const entries = [{ symbol: symbolKey, translation: translated, language: lang }];
-  await INSERT.into(SymbolTranslation).entries(entries);
-  return { action: "insert" };
-}
-
-async function ensureSymbolRowTranslation(id: any, value: string) {
-  try {
-    await UPDATE(Symbol).set({ translation: value }).where({ ID: id });
-  } catch (e) {
-    console.error("Failed to set Symbol.translation", id, e);
-  }
-}
-
 export const translate = async (req: cds.Request) => {
-  const ids = toIdArray(req.params);
-  const resultOut: Array<string | null> = [];
+  // Input: req.params may be a single ID, an array of IDs, or empty (meaning: translate all symbols)
+  let ids: any[] = Array.isArray(req.params) ? req.params : (req.params ? [req.params] : []);
+  const results: any[] = [];
+  const translationsOut: Array<string | null> = [];
+
+  // Load all translation mapping records once
   const translationsRaw: any[] = await SELECT.from(SymbolTranslation);
-  const lookup = buildLookup(translationsRaw);
+//ID;language;symbol;translation
+  // Helper: pick a likely text field from a symbol record
+  const pickTextField = (record: any) => {
+    // Prefer the actual symbol field (lowercase or PascalCase), then an explicit translation field,
+    // then any other string field. Avoid selecting the ID field as the primary text.
+    const candidates = ["symbol", "Symbol", "translation", "Translation", "text", "Text"];
+    if (record) {
+      for (const c of candidates) {
+        if (Object.prototype.hasOwnProperty.call(record, c) && typeof record[c] === "string") {
+          return c;
+        }
+      }
+      // fallback: pick the first non-ID string field
+      for (const k of Object.keys(record)) {
+        if ((k.toLowerCase() === 'id')) continue;
+        if (typeof record[k] === "string") return k;
+      }
+    }
+    return null;
+  };
 
-  const targetIds = ids.length ? ids : (await SELECT.from(Symbol).columns("ID")).map((r: any) => r.ID);
+  // Helper: extract mapping pair from various possible field names
+  const extractPair = (t: any) => {
+    const from = t.Source || t.source || t.From || t.from || t.Token || t.symbol || t.symbolValue;
+    const to = t.Target || t.target || t.To || t.to || t.Translation || t.translation || t.translated;
+    return { from, to, raw: t };
+  };
 
-  for (const id of targetIds) {
+  const mappingPairs = translationsRaw.map(extractPair).filter(p => typeof p.from === "string" && typeof p.to === "string");
+
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // If no ids provided, translate all symbols in the database
+  if (!ids || ids.length === 0) {
+    const rows: any[] = await SELECT.from(Symbol).columns('ID');
+    ids = rows.map(r => r.ID);
+  }
+
+  for (const id of ids) {
     try {
       const record: any = await SELECT.one.from(Symbol).where({ ID: id });
       if (!record) {
-        resultOut.push(null);
+        results.push({ translation: null, ok: false, reason: "not found" });
+        translationsOut.push(null);
         continue;
       }
-      const field = chooseTextField(record);
-      if (!field) {
-        resultOut.push(null);
+
+      const textField = pickTextField(record);
+      if (!textField) {
+        results.push({ translation: null, ok: false, reason: "no text field found on symbol" });
+        translationsOut.push(null);
         continue;
       }
-      const original = String(record[field] || "");
-      const lang = record.language ?? "";
-      const translated = translateTokens(original, lookup, lang);
+
+      const original = record[textField] as string;
+      let translated = original;
+
+      // Translate by token (symbol) rather than by regex replacements.
+      // Build an in-memory map: translationsByLang[language][symbol] = translation
+      const translationsByLang: Record<string, Record<string, string>> = {};
+      for (const t of translationsRaw) {
+        const langKey = t.language ?? '';
+        translationsByLang[langKey] = translationsByLang[langKey] || {};
+        translationsByLang[langKey][t.symbol] = t.translation;
+      }
+
+      // Split into symbol tokens (split on whitespace and common separators), translate each token,
+      // then join translated tokens with a single space so multiple symbols become readable words.
+      const tokens = original.split(/[\s,;\/|]+/).filter(t => t && t.length > 0);
+      const langKey = record.language ?? '';
+      const mappedTokens = tokens.map(tok => {
+        let found: string | undefined;
+        if (translationsByLang[langKey] && translationsByLang[langKey][tok]) found = translationsByLang[langKey][tok];
+        if (!found && translationsByLang[''] && translationsByLang[''][tok]) found = translationsByLang[''][tok];
+        if (!found) {
+          // case-insensitive search across all languages
+          for (const lk of Object.keys(translationsByLang)) {
+            const m = Object.keys(translationsByLang[lk]).find(k => k.toLowerCase() === tok.toLowerCase());
+            if (m) {
+              found = translationsByLang[lk][m];
+              break;
+            }
+          }
+        }
+        return found ?? tok;
+      });
+
+      // Join with single spaces per your request ("paste them next to each other with a space").
+      translated = mappedTokens.join(' ');
+
+      // Upsert into SymbolTranslation table (match by symbol text + language)
       const symbolKey = record.symbol ?? original;
+      const lang = record.language ?? null;
 
       if (translated !== original) {
-        await upsertTranslation(symbolKey, record.language ?? null, translated);
-        await ensureSymbolRowTranslation(id, translated);
-        resultOut.push(translated);
+        const existing: any = await SELECT.one.from(SymbolTranslation).where({ symbol: symbolKey, language: lang });
+        if (existing) {
+          await UPDATE(SymbolTranslation).set({ translation: translated }).where({ ID: existing.ID });
+          results.push({ translation: translated, ok: true, updated: "SymbolTranslation", id: existing.ID, before: original, after: translated });
+        } else {
+          await INSERT.into(SymbolTranslation).entries([{ symbol: symbolKey, translation: translated, language: lang }]);
+          results.push({ translation: translated, ok: true, created: "SymbolTranslation", before: original, after: translated });
+        }
+
+        // Also persist the composed translation onto the Symbol row so the UI's `translation` column
+        // shows the new text immediately after refresh/read.
+        try {
+          await UPDATE(Symbol).set({ translation: translated }).where({ ID: id });
+        } catch (uerr) {
+          // non-fatal: log and continue
+          console.error('Failed to update Symbol.translation for', id, String(uerr));
+        }
+
+        translationsOut.push(translated);
       } else {
-        const existing: any = await SELECT.one.from(SymbolTranslation).where({ symbol: symbolKey, language: record.language ?? null });
-        const final = existing?.translation ?? original;
-        if (!existing) await INSERT.into(SymbolTranslation).entries([{ symbol: symbolKey, translation: original, language: record.language ?? null }]);
-        await ensureSymbolRowTranslation(id, final);
-        resultOut.push(final);
+        const existing: any = await SELECT.one.from(SymbolTranslation).where({ symbol: symbolKey, language: lang });
+        const finalTranslation = existing?.translation ?? original;
+        if (!existing) {
+          await INSERT.into(SymbolTranslation).entries([{ symbol: symbolKey, translation: original, language: lang }]);
+          results.push({ translation: original, ok: true, created: "SymbolTranslation", before: null, after: original });
+        } else {
+          results.push({ translation: finalTranslation, ok: true, message: "no changes" });
+        }
+
+        // Ensure Symbol.translation reflects the current translation
+        try {
+          await UPDATE(Symbol).set({ translation: finalTranslation }).where({ ID: id });
+        } catch (uerr) {
+          console.error('Failed to update Symbol.translation for', id, String(uerr));
+        }
+
+        translationsOut.push(finalTranslation);
       }
-    } catch (e) {
-      console.error("translate failed for id", id, e);
-      resultOut.push(null);
+      } catch (e) {
+      results.push({ translation: null, ok: false, reason: (e && (e as any).message) || String(e) });
+      translationsOut.push(null);
     }
   }
 
-  return resultOut.length === 1 ? resultOut[0] : resultOut;
+  // If a single id was provided, return a single string (or null on error), otherwise return array of strings/nulls
+  if (translationsOut.length === 1) return translationsOut[0];
+  return translationsOut;
 };

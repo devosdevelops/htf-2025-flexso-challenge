@@ -12,11 +12,13 @@
                 <vizDataset:FlattenedDataset id="sonarDataset" data="{ path: '/Sonar', parameters: { $expand: 'sonarType,subnauticLocation' } }">
                     <vizDataset:dimensions>
                         <vizDataset:DimensionDefinition id="sonarFinding" name="SonarFinding" value="{finding}" />
+                        <!-- Expose sonar type name and id so selection payload contains them -->
+                        <vizDataset:DimensionDefinition id="sonarTypeId" name="SonarTypeID" value="{sonarType_ID}" />
                     </vizDataset:dimensions>
                     <vizDataset:measures>
                         <vizDataset:MeasureDefinition id="hoursMeas" name="Hours" value="{hoursInPast}"/>
                         <vizDataset:MeasureDefinition id="milesMeas" name="Miles" value="{milesFromBase}"/>
-                        <vizDataset:MeasureDefinition id="sizeMeas" name="Size" value="5"/>
+                        <vizDataset:MeasureDefinition id="sizeMeas" name="Size" value="{signalStrength}"/>
                     </vizDataset:measures>
                 </vizDataset:FlattenedDataset>
             </viz:dataset>
@@ -24,6 +26,7 @@
                 <vizFeeds:FeedItem id="feedValueAxis" uid="valueAxis" type="Measure" values="Hours"/>
                 <vizFeeds:FeedItem id="feedValueAxis2" uid="valueAxis2" type="Measure" values="Miles"/>
                 <vizFeeds:FeedItem id="feedBubbleWidth" uid="bubbleWidth" type="Measure" values="Size"/>
+                <vizFeeds:FeedItem id="feedBubbleColor" uid="bubbleColor" type="Dimension" values="SonarTypeId"/>
             </viz:feeds>
             <viz:dependents>
                 <viz:Popover id="sonarPopOver" />

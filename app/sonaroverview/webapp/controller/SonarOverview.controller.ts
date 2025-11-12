@@ -19,6 +19,13 @@ export default class SonarOverview extends Controller {
         this._initVizFrame();
     }
 
+    private _getDataValue(selected: any, key: string): any {
+        const arr = selected?.data?.val;
+        if (!Array.isArray(arr)) { return undefined; }
+        const entry = arr.find((v: any) => v.id === key || v.name === key);
+        return entry?.value;
+    }
+
     private async _initVizFrame(): Promise<void> { 
         //This whole vizframe setup isn't very well documented or known online
         //Don't be afraid to ask some of the Crew to help with this part if you get stuck
@@ -57,6 +64,30 @@ export default class SonarOverview extends Controller {
             vizPopover.setCustomDataControl( (selectedSonarReading: any) => {
                 //HACK THE FUTURE Challenge:
                 //We want to visualise our findings when clicked
+                
+                console.log("Selected sonar reading:", selectedSonarReading);
+                this.selectedSonarReading = selectedSonarReading;
+                
+                    const form = new SimpleForm({
+                        editable: false,
+                        content: [
+                            new Label({ text: "Sonar Finding" }),
+                            new Text({ text: this._getDataValue(selectedSonarReading, "SonarFinding") ?? "-" }),
+                            new Label({ text: "Hours In Past" }),
+                            new Text({ text: String(
+                                this._getDataValue(selectedSonarReading, "Hours")
+                                ?? this._getDataValue(selectedSonarReading, "HoursInPast")
+                                ?? "-"
+                            ) }),
+                            new Label({ text: "Miles From Base" }),
+                            new Text({ text: String(
+                                this._getDataValue(selectedSonarReading, "Miles")
+                                ?? this._getDataValue(selectedSonarReading, "MilesFromBase")
+                                ?? "-"
+                            ) })
+                        ]
+                    });
+                    return form;
             })
             vizPopover.connect(oViz.getVizUid());
             vizPopover.setFormatString(ChartFormatter.DefaultPattern.STANDARDFLOAT);

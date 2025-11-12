@@ -67,24 +67,37 @@ export default class SonarOverview extends Controller {
                 
                 console.log("Selected sonar reading:", selectedSonarReading);
                 this.selectedSonarReading = selectedSonarReading;
-                
+                    // Read sonar type fields exposed via dataset dimensions (fallbacks supported)
                     const form = new SimpleForm({
                         editable: false,
                         content: [
+                            // new Label({ text: "Sonar Type" }),
+                            // new Text({ text: "-" }),
+                            // new Label({ text: "Sonar Type ID" }),
+                            // new Text({ text: this._getDataValue(selectedSonarReading, "sonarTypeId") ?? "-" }),
+
                             new Label({ text: "Sonar Finding" }),
                             new Text({ text: this._getDataValue(selectedSonarReading, "SonarFinding") ?? "-" }),
+
                             new Label({ text: "Hours In Past" }),
                             new Text({ text: String(
                                 this._getDataValue(selectedSonarReading, "Hours")
                                 ?? this._getDataValue(selectedSonarReading, "HoursInPast")
                                 ?? "-"
                             ) }),
+
                             new Label({ text: "Miles From Base" }),
                             new Text({ text: String(
                                 this._getDataValue(selectedSonarReading, "Miles")
                                 ?? this._getDataValue(selectedSonarReading, "MilesFromBase")
                                 ?? "-"
-                            ) })
+                            ) }),
+
+                            new Label ({ text: 'Size'}),
+                            new Text ({ text: String(
+                                this._getDataValue(selectedSonarReading, "Size")
+                                ?? "-"
+                            )})
                         ]
                     });
                     return form;

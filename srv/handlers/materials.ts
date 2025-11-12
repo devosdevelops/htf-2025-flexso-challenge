@@ -50,7 +50,10 @@ export const produce = async (req: cds.Request) => {
   });
 
   if (check) {
-    new Promise(() => runInBackgroundProduce(allMaterials, productId));
+    // start background production (do not block the request)
+    void runInBackgroundProduce(allMaterials, productId).catch((e) => {
+      console.error('Background produce failed', e);
+    });
   }
 };
 
@@ -130,7 +133,8 @@ async function runInBackgroundProduce(
         .set({ value: newValue })
         .where({ ID: neutralState3.ID });
     } else {
-      production.close();
+      // stop the interval timer; using clearInterval avoids calling a non-existent method
+      clearInterval(production as any);
       const currentAmountCamera = await SELECT.from(ProductCamera)
         .columns("amountInStock")
         .where({ ID: productId });
@@ -150,6 +154,41 @@ export const replaceInstallation = async (req: cds.Request) => {
     .columns("product", "status")
     .where({ ID: id });
 
-  const productID = installation[0].product;
+  if (!installation || installation.length === 0) {
+    return { success: false, message: "Installation not found" };
+  }
 
+  const productID = installation[0].product as cds.__UUID;
+
+  // look up available cameras for that product
+  const cameras = await SELECT.from(ProductCamera)
+    .columns("amountInStock")
+    .where({ ID: productID });
+
+  if (!cameras || cameras.length === 0) {
+    return { success: false, message: "ProductCamera record not found" };
+  }
+
+  const inStock = (cameras[0].amountInStock as number) || 0;
+
+  if (inStock > 0) {
+    // decrement stock and mark installation as operational
+    await UPDATE.entity(ProductCamera)
+      .set({ amountInStock: inStock - 1 })
+      .where({ ID: productID });
+
+    await UPDATE.entity(Installation)
+      .set({ status: "Operational" })
+      .where({ ID: id });
+
+    return { success: true, message: "Installation replaced from stock" };
+  }
+
+  // Nothing in stock
+  return { success: false, message: "No cameras in stock to replace installation" };
+};
+
+export const replaceInstallationHandler = async (req: cds.Request) => {
+  // Backward-compatible exported handler name (some code may call replaceInstallation)
+  return replaceInstallation(req);
 };

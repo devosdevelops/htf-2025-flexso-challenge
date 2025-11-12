@@ -33,15 +33,58 @@ export default class Master extends Controller {
     // read route name and arguments to determine whether we should show selection
     const sName = event.getParameter && event.getParameter("name");
     if (sName === "masterWithSelection") {
-      // route has an id parameter which is the camera image guid
+      // route has an id parameter which should be the camera image guid
       const args: any = event.getParameter && event.getParameter("arguments");
-      const cameraImageGuid = (args && args.id) || "";
+      let rawId = (args && args.id) || "";
+      let cameraImageGuid = "";
+
+      // normalize various possible shapes returned by routing / callFunction
+      if (rawId) {
+        if (typeof rawId === "string") {
+          cameraImageGuid = rawId;
+        } else if (typeof rawId === "object") {
+          // common case: { value: 'guid' } or { '@odata.context':..., value: 'guid' }
+          if (rawId.value && typeof rawId.value === "string") {
+            cameraImageGuid = rawId.value;
+          } else if (rawId.ID && typeof rawId.ID === "string") {
+            cameraImageGuid = rawId.ID;
+          } else {
+            // try to find a string that looks like a GUID in the object values
+            const vals = Object.values(rawId);
+            for (const v of vals) {
+              if (typeof v === "string" && /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.test(v)) {
+                cameraImageGuid = v;
+                break;
+              }
+            }
+          }
+        }
+      }
 
       this.appViewModel.setProperty("/hasSelectedLocation", true);
+      // sanitize cameraImageGuid string by extracting any GUID-like substring
+      if (cameraImageGuid && typeof cameraImageGuid === "string") {
+        const m = cameraImageGuid.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+        if (m) {
+          cameraImageGuid = m[0];
+        }
+      }
+
+      // if still empty, try to extract GUID directly from rawId when rawId is a string containing object-like text
+      if (!cameraImageGuid && rawId && typeof rawId === "string") {
+        const mRaw = rawId.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+        if (mRaw) cameraImageGuid = mRaw[0];
+      }
+
       // bind view to the selected CameraImages entry (guard if no id)
       if (cameraImageGuid) {
-        // include quotes for string keys
+        // ensure plain string
+        cameraImageGuid = String(cameraImageGuid).replace(/^\s+|\s+$/g, "");
+        console.debug("onRouteMatched binding to CameraImages with id:", cameraImageGuid, "(rawId)", rawId);
         this.getView()?.bindElement({ path: `/CameraImages('${cameraImageGuid}')` });
+      } else {
+        // nothing to bind — clear any previous binding
+        try { (this.getView() as any)?.unbindElement(); } catch {}
       }
     }
   }
@@ -81,10 +124,23 @@ export default class Master extends Controller {
             urlParameters: { location: selectedKey },
             method: "GET"
           });
-          // callFunction for a function import usually returns the value directly
+          console.debug("getCamerarecordingIdForLocation result:", result);
+          // callFunction may return a string or an object; normalize to string GUID
           if (result) {
-            // when returning a primitive the framework may return it directly or as { value: ... }
-            cameraImageGuid = typeof result === "string" ? result : (result.value || "");
+            if (typeof result === "string") {
+              cameraImageGuid = result;
+            } else if (typeof result === "object") {
+              cameraImageGuid = result.value || result.ID || "";
+              if (!cameraImageGuid) {
+                // try to find a GUID-looking string in the object
+                for (const v of Object.values(result)) {
+                  if (typeof v === "string" && /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.test(v)) {
+                    cameraImageGuid = v;
+                    break;
+                  }
+                }
+              }
+            }
           }
         } else {
           // fallback: call the OData endpoint directly
@@ -103,6 +159,13 @@ export default class Master extends Controller {
     // fallback to a known camera image if none found (keeps the sample working)
     if (!cameraImageGuid) {
       cameraImageGuid = "59101ff5-c8a6-4bc3-804c-329d890090c8";
+    }
+
+    // sanitize again: if cameraImageGuid contains an object-like string, extract GUID substring
+    if (cameraImageGuid && typeof cameraImageGuid === "string") {
+      const m2 = cameraImageGuid.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+      if (m2) cameraImageGuid = m2[0];
+      cameraImageGuid = String(cameraImageGuid).replace(/^\s+|\s+$/g, "");
     }
 
     console.log("Resolved cameraImageGuid:", cameraImageGuid);
